@@ -1,0 +1,437 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#14213D">
+<title>FrenchTalk</title>
+<link rel="manifest" href="manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+<style>
+/* Layout: one-screen phone app — header, scene picker, transcript card that grows, controls pinned at the bottom. */
+:root {
+  --ink: #14213D;          /* metro-sign navy */
+  --paper: #F3F4F7;        /* cool off-white */
+  --card: #FFFFFF;
+  --line: #DADFE8;
+  --muted: #5D667A;
+  --accent: #D7263D;       /* signal red: live state, your lines */
+  --ai: #2A4D9B;           /* the French speaker's lines */
+  --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Atkinson Hyperlegible", system-ui, -apple-system, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #E8ECF5; --paper: #0E1424; --card: #172036; --line: #2A3552;
+    --muted: #97A1B8; --accent: #FF5A6E; --ai: #8FB0FF; color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--paper); color: var(--ink);
+  font: 16px/1.5 var(--font-body);
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.app {
+  height: 100%; max-width: 640px; margin: 0 auto;
+  display: flex; flex-direction: column; gap: 10px;
+  padding-block: 14px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+h1 { font: 800 28px/1 var(--font-display); margin: 0; letter-spacing: -0.02em; }
+h1 span { color: var(--accent); }
+.linkbtn { background: none; border: 0; color: var(--ai); font: 700 15px var(--font-body); padding: 6px 4px; cursor: pointer; }
+.linkbtn:focus-visible, button:focus-visible, select:focus-visible, input:focus-visible { outline: 3px solid var(--ai); outline-offset: 2px; }
+
+.settings { display: grid; gap: 10px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
+.settings p { margin: 0; font-size: 14px; color: var(--muted); }
+.settings a { color: var(--ai); }
+label { display: grid; gap: 4px; font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; min-width: 0; }
+input, select {
+  font: 16px var(--font-body); color: var(--ink); background: var(--paper);
+  border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; width: 100%; min-width: 0;
+}
+.row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.row.lvl { grid-template-columns: 1fr 2fr; }
+
+.status { font-size: 14px; color: var(--muted); min-height: 1.5em; display: flex; align-items: center; gap: 8px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--line); flex: none; }
+.live .dot { background: var(--accent); animation: pulse 1.4s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .live .dot { animation: none; } }
+
+.transcript {
+  flex: 1; min-height: 0; overflow-y: auto; background: var(--card);
+  border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.empty { color: var(--muted); font-size: 15px; margin: auto 0; }
+.msg { margin: 0; overflow-wrap: anywhere; }
+.msg b { display: block; font: 700 12px var(--font-body); letter-spacing: 0.06em; text-transform: uppercase; }
+.msg.user b { color: var(--accent); }
+.msg.ai b { color: var(--ai); }
+
+.typer { display: flex; gap: 8px; }
+.typer input { flex: 1; }
+.typer button { flex: none; }
+button.small {
+  font: 700 15px var(--font-body); color: var(--ai); background: var(--card);
+  border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; cursor: pointer;
+}
+button.small:disabled { opacity: .45; }
+.controls { display: flex; gap: 8px; }
+#talk {
+  flex: 1; height: 58px; border: 0; border-radius: 29px; cursor: pointer;
+  font: 800 20px var(--font-display); color: #fff; background: #2A4D9B;
+}
+#talk.on { background: #C21D33; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>French<span>Talk</span></h1>
+    <button class="linkbtn" id="toggleSettings" type="button">Réglages</button>
+  </header>
+
+  <section class="settings" id="settings" hidden>
+    <p>Clé gratuite : <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> → « Create API key ». Elle reste sur ce téléphone.</p>
+    <label for="apiKey">Clé API Gemini
+      <input id="apiKey" type="password" autocomplete="off" placeholder="AIza…">
+    </label>
+    <div class="row">
+      <label for="model">Modèle
+        <input id="model" type="text" autocomplete="off">
+      </label>
+      <label for="voice">Voix
+        <select id="voice"></select>
+      </label>
+    </div>
+  </section>
+
+  <label for="scenario">Situation
+    <select id="scenario"></select>
+  </label>
+  <div class="row lvl">
+    <label for="level">Niveau <select id="level"></select></label>
+    <label for="mode">Mode <select id="mode"></select></label>
+  </div>
+
+  <div class="status" id="statusRow"><span class="dot"></span><span id="status">Prêt.</span></div>
+
+  <div class="transcript" id="transcript" aria-live="polite">
+    <p class="empty" id="empty">Choisis une situation, appuie sur « Parler », et c'est ton interlocuteur qui commence.<br><br>Avec des écouteurs, tu peux lui couper la parole comme dans une vraie conversation.</p>
+  </div>
+
+  <div class="typer">
+    <input id="typed" type="text" placeholder="Écrire un mot ou une phrase…" enterkeyhint="send" autocomplete="off">
+    <button class="small" id="send" type="button">Envoyer</button>
+  </div>
+  <div class="controls">
+    <button id="talk" type="button">Parler</button>
+    <button class="small" id="mute" type="button" disabled>Micro</button>
+    <button class="small" id="copy" type="button">Copier</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+// ---------------------------------------------------------------- content
+const SCENARIOS = [
+  ["Café à Paris (commander, papoter)", "You are Camille, 29, a barista at a small café in the 11th arrondissement of Paris. The user just walked up to the counter. Take their order, then chat casually (the weather, the neighbourhood, what they're doing in Paris)."],
+  ["Boulangerie du quartier", "You are Monsieur Lefèvre, 58, who runs a neighbourhood bakery in Lyon. You're friendly but a bit busy. Serve the user, recommend something, make small talk."],
+  ["Gare : billet raté, changer de train", "You are a ticket agent at Gare de Lyon. The user missed their TGV to Marseille. Be realistic: explain options, prices, a slightly annoying rule or two."],
+  ["Chez le médecin", "You are Dr. Benali, a general practitioner (médecin généraliste). The user is a patient coming in with some symptoms. Ask the questions a real doctor would."],
+  ["Nouveau voisin dans l'immeuble", "You are Sophie, 34, who lives on the same floor. You meet the user on the stairs in their first week in the building and want to get to know them."],
+  ["Soirée entre amis", "You are Théo, 27, at a friend's apartment party. You don't know the user yet. Chat like a relaxed young French person: jokes, opinions, questions about their life."],
+  ["Entretien d'embauche", "You are Madame Garnier, an HR manager interviewing the user for a job at a mid-size French company. Ask realistic interview questions, follow up on answers."],
+  ["Service client (colis perdu)", "You are a customer-service agent for a delivery company on the phone. The user's package is lost. Follow your script a bit rigidly, ask for details, be polite but bureaucratic."],
+  ["DELF B2 : débat (production orale)", "You are a DELF B2 oral examiner. Give the user a short, realistic B2 topic (a social issue from a press article), let them present a position, then challenge it with counter-arguments like the real exam's discussion phase."],
+  ["Conversation libre", "You are Léa, 30, a curious, warm French person from Bordeaux chatting with the user. Let the conversation go wherever it goes."]
+];
+const LEVELS = ["A2", "B1", "B2", "C1"];
+const MODES = ["Immersion (sans corrections)", "Coach (corrections rapides)"];
+const VOICES = ["default", "Aoede", "Kore", "Leda", "Zephyr", "Charon", "Puck", "Fenrir", "Orus"];
+const DEFAULT_MODEL = "gemini-3.8-live";
+
+function systemPrompt(sc, lv, md) {
+  const lvl = LEVELS[lv];
+  const level = {
+    A2: "- Use simple, very common words and short sentences. Speak a little slower and more clearly than normal, but still naturally.",
+    B1: "- Use everyday vocabulary and some common idioms. Normal pace, clear articulation.",
+    B2: "- Speak at normal native speed with idioms, nuance and some slang, as you would with a French friend. This is DELF B2 preparation, so push the user to justify opinions and give examples.",
+    C1: "- Speak completely naturally, fast, with slang, humour and cultural references."
+  }[lvl];
+  const feedback = md === 0
+    ? "- Do NOT explicitly correct mistakes. Instead, naturally recast: repeat the correct form inside your reply the way a native would (user: 'je suis allé hier au cinéma avec mon ami, il était bien' -> you: 'Ah, t'es allé au ciné hier ? C'était bien, le film ?')."
+    : "- When the user makes a clear grammar, vocabulary or gender mistake, start your reply with a very quick correction in French in one short sentence (e.g. 'Petite chose : on dit « je suis allé », pas « j'ai allé ».'), then continue in character. Ignore tiny slips. Max one correction per turn.";
+  return `ROLE
+${SCENARIOS[sc][1]}
+
+SOUND LIKE A REAL PERSON, NOT AN ASSISTANT
+- Speak only French (France). Native, spoken, everyday French: drop the 'ne' in negations, use 'on' instead of 'nous', contractions like 't'as', 'y a', 'j'sais pas'.
+- Use natural fillers and reactions where a native would: 'euh', 'bah', 'ben', 'du coup', 'genre', 'en fait', 'ah ouais ?', 'carrément', 'mince', 'trop bien'.
+- Keep turns SHORT: usually 1-3 sentences, like real dialogue. Never lecture, never list things.
+- Have your own opinions, moods and small life details. Ask the user questions back.
+- Never say you are an AI, a model or an assistant. Stay in character.
+- Speak at a natural pace with natural intonation and emotion.
+
+ADAPT TO A ${lvl} LEARNER
+${level}
+- If the user is clearly lost, rephrase more simply once, then continue. If they ask 'comment on dit ...' or say a word in English, give the French word briefly and carry on.
+
+FEEDBACK
+${feedback}
+
+START
+Open the conversation yourself with a short, natural first line that fits the scene.`;
+}
+
+// ---------------------------------------------------------------- storage
+const store = {
+  get(k, d) { try { const v = localStorage.getItem("ft_" + k); return v === null ? d : v; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem("ft_" + k, v); } catch {} }
+};
+
+// ---------------------------------------------------------------- UI setup
+const $ = id => document.getElementById(id);
+function fill(sel, items, idx) {
+  items.forEach((t, i) => { const o = document.createElement("option"); o.value = i; o.textContent = t; sel.appendChild(o); });
+  sel.value = String(Math.min(Number(idx) || 0, items.length - 1));
+}
+fill($("scenario"), SCENARIOS.map(s => s[0]), store.get("scenario", 0));
+fill($("level"), LEVELS, store.get("level", 2));
+fill($("mode"), MODES, store.get("mode", 0));
+fill($("voice"), VOICES, store.get("voice", 1));
+$("apiKey").value = store.get("apiKey", "");
+$("model").value = store.get("model", DEFAULT_MODEL);
+if (!$("apiKey").value) { $("settings").hidden = false; setStatus("Colle ta clé API Gemini (gratuite) dans Réglages pour commencer."); }
+$("toggleSettings").onclick = () => { $("settings").hidden = !$("settings").hidden; };
+
+function setStatus(t, live) {
+  $("status").textContent = t;
+  if (live !== undefined) $("statusRow").classList.toggle("live", live);
+}
+
+// ---------------------------------------------------------------- transcript
+let lines = [], aiTurnClosed = true;
+function addChunk(user, text) {
+  let last = lines[lines.length - 1];
+  if (!user && aiTurnClosed) { last = null; aiTurnClosed = false; }
+  if (!last || last.user !== user) { last = { user, text: "", el: null }; lines.push(last); }
+  last.text += text;
+  render(last);
+}
+function render(line) {
+  $("empty").hidden = true;
+  if (!line.el) {
+    line.el = document.createElement("p");
+    line.el.className = "msg " + (line.user ? "user" : "ai");
+    const b = document.createElement("b"); b.textContent = line.user ? "Toi" : "Ton interlocuteur";
+    line.el.appendChild(b); line.el.appendChild(document.createElement("span"));
+    $("transcript").appendChild(line.el);
+  }
+  line.el.lastChild.textContent = line.text.trim();
+  $("transcript").scrollTop = $("transcript").scrollHeight;
+}
+function clearTranscript() {
+  lines.forEach(l => l.el && l.el.remove()); lines = []; aiTurnClosed = true;
+  $("empty").hidden = false;
+}
+
+// ---------------------------------------------------------------- audio
+const IN_RATE = 16000;
+let micCtx, micStream, micNode, playCtx, nextPlay = 0, playing = [], muted = false, wakeLock = null;
+
+const WORKLET = `
+class Down extends AudioWorkletProcessor {
+  constructor(o) { super(); this.ratio = sampleRate / ${IN_RATE}; this.pos = 0; this.buf = new Int16Array(1600); this.n = 0; this.carry = []; }
+  process(inputs) {
+    const ch = inputs[0][0]; if (!ch) return true;
+    const data = this.carry.length ? Float32Array.from([...this.carry, ...ch]) : ch;
+    let p = this.pos;
+    while (p + 1 < data.length) {
+      const i = Math.floor(p), f = p - i;
+      let s = data[i] * (1 - f) + data[i + 1] * f;
+      s = Math.max(-1, Math.min(1, s));
+      this.buf[this.n++] = s < 0 ? s * 0x8000 : s * 0x7fff;
+      if (this.n === this.buf.length) { this.port.postMessage(this.buf.buffer.slice(0)); this.n = 0; }
+      p += this.ratio;
+    }
+    const keep = Math.floor(p);
+    this.carry = Array.from(data.subarray(keep));
+    this.pos = p - keep;
+    return true;
+  }
+}
+registerProcessor("down", Down);`;
+
+async function startMic() {
+  micStream = await navigator.mediaDevices.getUserMedia({
+    audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+  });
+  micCtx = new AudioContext();
+  const url = URL.createObjectURL(new Blob([WORKLET], { type: "application/javascript" }));
+  await micCtx.audioWorklet.addModule(url);
+  const src = micCtx.createMediaStreamSource(micStream);
+  micNode = new AudioWorkletNode(micCtx, "down");
+  micNode.port.onmessage = e => { if (!muted) sendAudio(e.data); };
+  src.connect(micNode);
+}
+function stopMic() {
+  try { micStream && micStream.getTracks().forEach(t => t.stop()); } catch {}
+  try { micCtx && micCtx.close(); } catch {}
+  micStream = micCtx = micNode = null;
+}
+
+function playPcm(b64) {
+  if (!playCtx) return;
+  const bin = atob(b64), n = bin.length >> 1;
+  const f = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    let v = bin.charCodeAt(2 * i) | (bin.charCodeAt(2 * i + 1) << 8);
+    if (v >= 0x8000) v -= 0x10000;
+    f[i] = v / 0x8000;
+  }
+  const buf = playCtx.createBuffer(1, n, 24000);
+  buf.copyToChannel(f, 0);
+  const s = playCtx.createBufferSource();
+  s.buffer = buf; s.connect(playCtx.destination);
+  const t = Math.max(nextPlay, playCtx.currentTime + 0.04);
+  s.start(t); nextPlay = t + buf.duration;
+  playing.push(s);
+  s.onended = () => { playing = playing.filter(x => x !== s); };
+}
+function stopPlayback() {
+  playing.forEach(s => { try { s.stop(); } catch {} });
+  playing = []; nextPlay = 0;
+}
+
+function toB64(ab) {
+  const u = new Uint8Array(ab); let s = "";
+  for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+
+// ---------------------------------------------------------------- Gemini Live
+let ws = null, ready = false, active = false;
+const WS_URL = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=";
+
+function send(obj) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj)); }
+function sendAudio(ab) { if (ready) send({ realtimeInput: { audio: { data: toB64(ab), mimeType: "audio/pcm;rate=16000" } } }); }
+function sendText(t) { if (ready) send({ realtimeInput: { text: t } }); }
+
+async function start() {
+  const key = $("apiKey").value.trim();
+  if (!key) { $("settings").hidden = false; setStatus("Ajoute d'abord ta clé API Gemini dans Réglages."); $("apiKey").focus(); return; }
+  const model = $("model").value.trim() || DEFAULT_MODEL;
+  ["apiKey", "scenario", "level", "mode", "voice"].forEach(k => store.set(k, $(k).value));
+  store.set("model", model);
+
+  active = true; muted = false;
+  $("talk").textContent = "Terminer"; $("talk").classList.add("on");
+  $("settings").hidden = true; setOptions(false); clearTranscript();
+  setStatus("Accès au micro…", true);
+
+  try {
+    playCtx = new AudioContext({ sampleRate: 24000 });
+    await playCtx.resume();
+    await startMic();
+  } catch (e) {
+    stop("Micro refusé ou indisponible : autorise le micro pour ce site dans Chrome.");
+    return;
+  }
+  try { wakeLock = await navigator.wakeLock?.request("screen"); } catch {}
+
+  setStatus("Connexion…", true);
+  const gen = { responseModalities: ["AUDIO"] };
+  const voice = VOICES[Number($("voice").value)];
+  if (voice !== "default") gen.speechConfig = { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } };
+  const setup = {
+    setup: {
+      model: "models/" + model,
+      generationConfig: gen,
+      systemInstruction: { parts: [{ text: systemPrompt(+$("scenario").value, +$("level").value, +$("mode").value) }] },
+      inputAudioTranscription: {},
+      outputAudioTranscription: {},
+      contextWindowCompression: { slidingWindow: {} }
+    }
+  };
+
+  ws = new WebSocket(WS_URL + encodeURIComponent(key));
+  ws.onopen = () => send(setup);
+  ws.onmessage = async ev => {
+    const raw = typeof ev.data === "string" ? ev.data : await ev.data.text();
+    let m; try { m = JSON.parse(raw); } catch { return; }
+    if (m.setupComplete) {
+      ready = true;
+      $("mute").disabled = false;
+      setStatus("En ligne — parle quand tu veux.", true);
+      sendText("(La scène commence. Dis ta première réplique.)");
+      return;
+    }
+    if (m.goAway) setStatus("La session gratuite va bientôt se terminer.", true);
+    const sc = m.serverContent; if (!sc) return;
+    if (sc.interrupted) { stopPlayback(); aiTurnClosed = true; }
+    for (const p of sc.modelTurn?.parts || []) if (p.inlineData?.data) playPcm(p.inlineData.data);
+    if (sc.inputTranscription?.text) { addChunk(true, sc.inputTranscription.text); aiTurnClosed = true; }
+    if (sc.outputTranscription?.text) addChunk(false, sc.outputTranscription.text);
+    if (sc.turnComplete) aiTurnClosed = true;
+  };
+  ws.onclose = ev => { if (active) stop(explain(ev.reason, ev.code)); };
+  ws.onerror = () => {};
+}
+
+function explain(reason, code) {
+  const r = (reason || "").trim(), low = r.toLowerCase();
+  if (!r) return code === 1006 ? "Connexion impossible (réseau ou clé invalide)." : "Connexion fermée (" + code + ").";
+  if (/api key|permission|403|unauthenticated/.test(low)) return "Clé API refusée : vérifie-la dans Réglages. (" + r + ")";
+  if (/quota|429|exhausted|rate/.test(low)) return "Limite gratuite atteinte pour l'instant, réessaie plus tard. (" + r + ")";
+  if (/not found|not supported|404/.test(low)) return "Modèle introuvable : essaie gemini-3.1-flash-live-preview dans Réglages. (" + r + ")";
+  return r;
+}
+
+function stop(msg) {
+  active = false; ready = false;
+  try { ws && ws.close(1000); } catch {}
+  ws = null;
+  stopMic(); stopPlayback();
+  try { playCtx && playCtx.close(); } catch {}
+  playCtx = null;
+  try { wakeLock && wakeLock.release(); } catch {}
+  wakeLock = null;
+  $("talk").textContent = "Parler"; $("talk").classList.remove("on");
+  $("mute").disabled = true; $("mute").textContent = "Micro";
+  setOptions(true);
+  setStatus(msg || "Conversation terminée. « Copier » garde la transcription.", false);
+}
+function setOptions(on) { ["scenario", "level", "mode", "voice", "apiKey", "model"].forEach(k => $(k).disabled = !on); }
+
+$("talk").onclick = () => active ? stop() : start();
+$("mute").onclick = () => { muted = !muted; $("mute").textContent = muted ? "Micro coupé" : "Micro"; };
+function sendTyped() {
+  const t = $("typed").value.trim();
+  if (!t || !ready) return;
+  sendText(t); addChunk(true, t + " ⌨"); aiTurnClosed = true; $("typed").value = "";
+}
+$("send").onclick = sendTyped;
+$("typed").addEventListener("keydown", e => { if (e.key === "Enter") sendTyped(); });
+$("copy").onclick = async () => {
+  const text = lines.map(l => (l.user ? "Toi : " : "Interlocuteur : ") + l.text.trim()).join("\n\n");
+  if (!text) return;
+  try { await navigator.clipboard.writeText(text); setStatus("Transcription copiée."); }
+  catch { setStatus("Copie impossible ici : sélectionne le texte à la main."); }
+};
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && active && (!wakeLock || wakeLock.released)) navigator.wakeLock?.request("screen").then(l => wakeLock = l).catch(() => {});
+});
+</script>
+</body>
+</html>

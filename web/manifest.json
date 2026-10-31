@@ -1,0 +1,11 @@
+{
+  "name": "FrenchTalk",
+  "short_name": "FrenchTalk",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#F3F4F7",
+  "theme_color": "#14213D",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
